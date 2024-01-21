@@ -1,0 +1,846 @@
+<!DOCTYPE HTML>
+<html lang="fr">
+
+<head>
+  <title>DUT MMI - TD3</title>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" href="images/icon.png" />
+  <style>
+    body {
+      margin: 0px;
+      padding: 0px;
+      background-color: #777777;
+    }
+
+    #canvas {
+      display: block;
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      right: 434px;
+      bottom: 10px;
+      background-color: #000000;
+    }
+
+    #info {
+      display: block;
+      position: absolute;
+      width: 400px;
+      top: 10px;
+      right: 10px;
+      bottom: 10px;
+      background-color: #EEEEEE;
+      border: 2px solid white;
+      padding: 5px;
+      font-size: 14pt;
+      font-family: times new roman;
+      font-weight: bold;
+      font-style: italic;
+      color: black;
+    }
+
+    input {
+      background-color: #FFFFFF;
+      border: none;
+      width: 260px;
+      color: black;
+      font-size: 14pt;
+      font-family: times new roman;
+      font-weight: bold;
+    }
+
+    #divTexture {
+      display: none;
+      position: absolute;
+      width: 256px;
+      height: 256px;
+      bottom: 5px;
+      left: 5px;
+      background-color: black;
+      border: 1px solid white;
+      padding: 0px;
+      color: white;
+    }
+
+    #canvasTexture {
+      width: 256px;
+      height: 256px;
+      background: white;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="canvas"></div>
+  <div id="info">
+    <table>
+      <tr>
+        <td>Click position:</td>
+        <td><input type="text" id="positions" value="(0;0)" class="info" /></td>
+      </tr>
+      <tr>
+        <td>Clicked object:</td>
+        <td><input type="text" id="obj_name" value="vide" class="info" /></td>
+      </tr>
+      <tr>
+        <td>Action:</td>
+        <td><input type="text" id="action" value="0" class="info" /></td>
+      </tr>
+      <tr>
+        <td>Mo awake : </td>
+        <td><input type="checkbox" checked id="MoTexture" /></td>
+      </tr>
+      <tr>
+        <td>State : </td>
+        <td></td>
+      </tr>
+      <tr>
+        <td colspan=2>
+          <input type="radio" id="sleep" checked name="states" value="sleep">Sleep<br>
+          <input type="radio" id="awake" name="states" value="awake">Awake<br>
+          <input type="radio" id="walk" name="states" value="walk">Walk<br>
+          <input type="radio" id="run" name="states" value="run">Run<br>
+          <input type="radio" id="clean" name="states" value="clean">Clean<br>
+        </td>
+      </tr>
+    </table>
+    <div id="divTexture">
+      <canvas id="canvasTexture" width="256" height="256" />
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from '../three.js-dev/build/three.module.js';
+    import { FirstPersonControls } from '../three.js-dev/examples/jsm/controls/FirstPersonControls.js';
+    import { ColladaLoader } from '../three.js-dev/examples/jsm/loaders/ColladaLoader.js';
+
+
+
+
+    var clickInfo = [];
+    var animations = [];
+    var obstacles = [];
+    var container = document.getElementById("canvas");
+    const raycaster = new THREE.Raycaster();
+    let activeControl = false, tacheVisible = false;
+
+    var renderer, camera, scene, controls;
+    var target;
+    var clock = new THREE.Clock();
+    var SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_LEFT, SCREEN_TOP;
+    var textureMoAwake, selfMoAwake, textureMoSleep, selfMoSleep;
+    var tete, corps, MoRoot, bras, avantbras, gardeboue, rouleau, roue, tete, gyrophare, tache;
+
+    function onClickEvent(event) {
+      clickInfo.userHasClicked = true;
+      clickInfo.mouse = new THREE.Vector2();
+      clickInfo.mouse.x = ((event.clientX - SCREEN_LEFT) / SCREEN_WIDTH) * 2 - 1;
+      clickInfo.mouse.y = -((event.clientY - SCREEN_TOP) / SCREEN_HEIGHT) * 2 + 1;
+      clickInfo.leftButton = true
+    }
+    function onContextMenuEvent(event) {
+      clickInfo.userHasClicked = true;
+      clickInfo.mouse = new THREE.Vector2();
+      clickInfo.mouse.x = ((event.clientX - SCREEN_LEFT) / SCREEN_WIDTH) * 2 - 1;
+      clickInfo.mouse.y = -((event.clientY - SCREEN_TOP) / SCREEN_HEIGHT) * 2 + 1;
+      clickInfo.leftButton = false
+    }
+
+    function onWindowResize() {
+      let w = container.offsetWidth;
+      let h = container.offsetHeight;
+      SCREEN_WIDTH = container.scrollWidth;
+      SCREEN_HEIGHT = container.scrollHeight;
+      SCREEN_LEFT = container.offsetLeft - container.scrollLeft + container.clientLeft;
+      SCREEN_TOP = container.offsetTop - container.scrollTop + container.clientTop;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+
+
+    function onKeypressEvent() {
+      if (event.keyCode == 32) {//si la touche détectée est 'espace' alors on change
+        activeControl = !activeControl;
+      }
+    }
+    function start() {
+      // initialisation du moteur de rendu
+      renderer = new THREE.WebGLRenderer();
+      renderer.shadowMap.enabled = true; //activer la gestion des ombres
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+
+      // création d'un canvas dans un div
+      renderer.setClearColor(0x222222, 1);
+      window.addEventListener('resize', onWindowResize, false);
+
+      container.appendChild(renderer.domElement);
+      container.addEventListener('click', onClickEvent, false);//détection du clique gauche
+      container.addEventListener('contextmenu', onContextMenuEvent, false);//détection du clique droit
+      window.addEventListener('keypress', onKeypressEvent, false)
+
+      document.getElementsByName('states').forEach(a => a.addEventListener('change', (event) => { changeMoState(a.value); }));
+
+      document.getElementById('MoTexture').addEventListener('change', (event) => {
+        //code de changement d'état
+        // alert("MoTexture:"+ event.currentTarget.checked);
+        //changer la texture (true-> awake, false->sleep)
+        let tete = scene.getObjectByName('tete');
+        if (event.currentTarget.checked) {
+          tete.children[1].material.map = textureMoAwake;
+          tete.children[1].material.emissiveMap = selfMoAwake;
+        } else {
+          tete.children[1].material.map = textureMoSleep;
+          tete.children[1].material.emissiveMap = selfMoSleep;
+        }
+
+      });
+
+      let w = container.offsetWidth;
+      let h = container.offsetHeight;
+      SCREEN_WIDTH = container.scrollWidth;
+      SCREEN_HEIGHT = container.scrollHeight;
+      SCREEN_LEFT = container.offsetLeft - container.scrollLeft + container.clientLeft;
+      SCREEN_TOP = container.offsetTop - container.scrollTop + container.clientTop;
+      renderer.setSize(w, h);
+
+      // création d'une caméra perspective(angle d'ouverture, rapport largeur/hauteur, near, far)
+      camera = new THREE.PerspectiveCamera(60, w / h, 1, 600);
+      camera.position.set(60, 20, 0);
+      controls = new FirstPersonControls(camera, renderer.domElement);
+      controls.lookAt(new THREE.Vector3(0, 20, 0));
+      controls.lookSpeed = 0.20;
+      controls.movementSpeed = 40;
+
+      // création de la scène
+      scene = new THREE.Scene();
+      scene.add(camera);
+      // //scene.fog = new THREE.Fog( 0xcccccc, 1, 250 ); // brume simple entre 1 et 300 de distance
+      // scene.fog = new THREE.FogExp2( 0xaaaaaa, 0.009 ); // brume exponentielle physique
+
+      clock.start();
+      var loader = new ColladaLoader();
+      loader.load('./models/mo.dae', onLoaded, onProgress, onError);
+
+      var ambientLight = new THREE.AmbientLight(0x101010);
+      scene.add(ambientLight);
+    }
+
+    var vertical = new THREE.Vector3(0, -1, 0);
+
+    function animate() {
+
+
+
+      // rendu de la scène
+      let dt = clock.getDelta();
+
+
+
+      let save = camera.position.clone();
+      if (activeControl) controls.update(dt); // nouvelle position
+
+      //gestion des collisions
+      raycaster.set(camera.position, vertical)
+      let intersections = raycaster.intersectObjects(obstacles, true);
+      if (intersections.length > 0) {
+        document.getElementById('action').value = intersections[0].distance;
+        let h = intersections[0].distance;
+        camera.position.y += (20 - h) * 10 * dt;
+      } else {
+        document.getElementById('action').value = "out!";
+        camera.position.set(save.x, save.y, save.z)
+      }
+
+      renderer.render(scene, camera);
+
+      // détection du picking
+      if (clickInfo.userHasClicked) {
+        document.getElementById('positions').value = "(" + parseInt((clickInfo.mouse.x + 1) * SCREEN_WIDTH) + ';' + parseInt((1 - clickInfo.mouse.y) * SCREEN_HEIGHT) + ")";
+
+        clickInfo.userHasClicked = false;
+        raycaster.setFromCamera(clickInfo.mouse, camera);
+        let intersections = raycaster.intersectObjects(scene.children, true);
+        let obj = null;
+        if (intersections.length > 0) {
+          obj = intersections[0].object;
+          while (obj != null && obj.name == "") {
+            obj = obj.parent;
+          }
+          if (obj) {
+            animations.forEach(object => {
+              if (object.name == obj.name) {
+                object.onClick(intersections[0]);
+              }
+            });
+            document.getElementById('obj_name').value = obj.name + " uv=(" + Number.parseFloat(intersections[0].uv.x).toFixed(2) + "," + Number.parseFloat(intersections[0].uv.y).toFixed(2) + ")";
+          }
+
+
+          // recherche si l'objet 'floor' est dans la liste des objets cliqué
+          let found = false;
+          for (let i = 0; i < intersections.length; i++) {
+            // si l'objet n'a pas de nom, on lui donne le nom de son pere
+            obj = intersections[i].object;
+            while (obj != null && obj.name == "") {
+              obj = obj.parent;
+            }
+            //si on a trouvé l'objet floor 
+            if (obj && obj.name == 'floor') {
+              found = true; //on place le target à au point d'intersection entre le rayon et l'objet floor
+              if (clickInfo.leftButton) {
+                target.position.set(intersections[i].point.x,
+                  intersections[i].point.y + 0.05, intersections[i].point.z);
+                tache.position.y = -10 //cache la tache
+                tacheVisible = false;
+              } else {
+                tache.position.set(intersections[i].point.x,
+                  0.01, intersections[i].point.z);
+                target.position.set(intersections[i].point.x, -10, intersections[i].point.z) //cache la target
+                tacheVisible = true;
+
+              }
+            }
+          }
+          if (found) {
+            document.getElementById('obj_name').value = "floor found !";
+            MoRoot.animationStatus = 1//réveil
+            changeMoState("awake");
+            document.getElementById("awake").checked = true;
+            if (tacheVisible) {
+              changeMoState("run");
+              document.getElementById("run").checked = true;
+            }
+
+          }
+        } else {
+          document.getElementById('obj_name').value = "vide";
+        }
+      }
+
+      animations.forEach(object => { // mettre à jour l'animation sur tous les objects cliquables
+        object.updateAnimation(dt);
+      });
+
+
+      // lancement du frame suivant
+      requestAnimationFrame(animate);
+    }
+
+    function onLoaded(collada) {
+      let objects = collada.scene;
+
+
+      scene.add(objects);
+      objects.scale.set(1, 1, 1);
+
+      for (let i = 1; i <= 4; i++) {
+        //LUMIERE BLANCHE 
+        let spot = objects.getObjectByName('spot' + i);
+        spot.angle = THREE.Math.degToRad(80);
+        spot.penumbra = 30.0 / 50.0;
+        spot.distance = 50.0;
+        spot.visible = true;
+        spot.target = objects.getObjectByName('spot' + i + '.Target');
+      }
+      //LUMIERE BLEUE
+      let spot = objects.getObjectByName('spot_gyro');
+      spot.penumbra = 60.0 / 120.0;
+      spot.angle = THREE.Math.degToRad(60);
+      spot.distance = 120.0;
+      spot.visible = true;
+      spot.target = objects.getObjectByName('spot_gyro.Target');
+
+      spot.castShadow = true;
+      spot.shadow.mapSize.width = 1024;
+      spot.shadow.mapSize.height = 1024;
+      spot.shadow.camera.near = 10;
+      spot.shadow.camera.far = 120;
+      spot.shadowDarkness = 0.5;
+
+      // SOL
+      let floor = objects.getObjectByName('floor');
+      floor.visible = false;
+      let floor_step = objects.getObjectByName('floor_step');
+      floor_step.visible = false;
+
+      obstacles.push(floor); //objets dans le tableau d'obstacles
+      obstacles.push(floor_step);
+
+      let decors = objects.getObjectByName('decors');
+      decors.visible = true;
+      setShadow(decors, true, true);
+      // ou
+      // decors.castShadow = true; //objet produit une obre
+      // decors.receiveShadow = true; // objet recoit une ombre
+
+      let door1 = objects.getObjectByName('door1');
+      door1.visible = true;
+      setShadow(door1, true, true);
+
+      let door2 = objects.getObjectByName('door2');
+      door2.visible = true;
+      setShadow(door2, true, true);
+
+
+
+      door1.onClick = function (intersections) {
+        door1.animationStatus = 1;
+        door2.animationStatus = 1
+      }
+
+      door1.animationStatus = 0;
+      door1.xferme = door1.position.x;
+      door1.xouvert = 57.0;
+      door1.duration = 1.0;
+      door1.updateAnimation = function (dt) {
+        let dx = dt * (this.xouvert - this.xferme) / (this.duration);
+        switch (this.animationStatus) {
+          case 1://ouverture
+            this.position.x += dx;
+            if (this.position.x < this.xouvert) {
+              this.position.x = this.xouvert;
+              this.animationStatus = 2;
+              obstacles = [];//vider
+              obstacles.push(floor_step);
+              this.chrono = 2;
+              obstacles.push(floor);
+            }
+            break;
+          case 2: this.chrono -= dt;
+            if (this.chrono <= 0) {
+              this.animationStatus = 3
+            }
+            break;
+          case 3://fermeture
+            this.position.x -= dx;
+            if (this.position.x > this.xferme) {
+              this.position.x = this.xferme;
+              this.animationStatus = 0;
+              obstacles = [];//vider
+              obstacles.push(floor);
+            }
+            break;
+        }
+      }
+
+
+      door2.onClick = function (intersections) {
+        door1.animationStatus = 1;
+        door2.animationStatus = 1
+      }
+
+
+      door2.animationStatus = 0;
+      door2.xferme = door2.position.x;
+      door2.xouvert = 84.73;
+      door2.duration = 1.0;
+      door2.updateAnimation = function (dt) {
+        let dx = dt * (this.xouvert - this.xferme) / (this.duration);
+        switch (this.animationStatus) {
+          case 1://ouverture
+            this.position.x += dx;
+            if (this.position.x > this.xouvert) {
+              this.position.x = this.xouvert;
+              this.animationStatus = 2;
+              obstacles = [];//vider
+              obstacles.push(floor_step);
+              this.chrono = 2;
+              obstacles.push(floor);
+            }
+            break;
+          case 2: this.chrono -= dt;
+            if (this.chrono <= 0) {
+              this.animationStatus = 3
+            }
+            break;
+          case 3://fermeture
+            this.position.x -= dx;
+            if (this.position.x < this.xferme) {
+              this.position.x = this.xferme;
+              this.animationStatus = 0;
+              obstacles = [];//vider
+              obstacles.push(floor);
+            }
+            break;
+        }
+      }
+      animations.push(door1, door2);
+
+
+
+      decors.onClick = function (intersection) {
+        if (this.material[0].emissive.r == 0) {
+          this.material[0].emissive = new THREE.Color(1, 1, 1);
+        } else {
+          this.material[0].emissive = new THREE.Color(0, 0, 0);
+        }
+      };
+
+      //variation de la lumière
+      decors.t = 0;
+      decors.updateAnimation = function (dt) {
+        this.t += dt;
+        let v = 0.6 + 0.4 * Math.sin(Math.PI * this.t); //fonction sin
+        this.material[0].emissive = new THREE.Color(v, v, v);
+      }
+      animations.push(decors);
+
+      //1 : créer une variable qui accède à la tête du Mo
+      let tete = objects.getObjectByName('tete');
+      setShadow(tete, true, true);
+      tete.visible = true;
+
+      //2 : utiliser console.log pour étudier les données (chercher emissive)
+      console.log(tete);
+
+      //3 : modifier à la main 
+      //depuis tete, pas de materiel
+      //on regarde dans les fils(children[0] c'est le gyrophare), d'ou children[1]
+      //on trouve materiel, puis emissive, on teste le changement de valeur
+      //4 : modifier dans le code
+      //afficher la lumière sur le personnage
+      tete.children[1].material.emissive = new THREE.Color(1, 1, 1);
+
+      textureMoAwake = new THREE.TextureLoader().load('images/texture_mo.png');
+      textureMoSleep = new THREE.TextureLoader().load('images/texture_mo_sleep.png');
+      selfMoAwake = new THREE.TextureLoader().load('images/self_mo.png');
+      selfMoSleep = new THREE.TextureLoader().load('images/self_mo_sleep.png');
+
+      tete.children[1].material.map = textureMoAwake; // change la texture principale (diffuse)
+      tete.children[1].material.emissiveMap = selfMoAwake; // change la texture d'émission
+
+
+      let corps = objects.getObjectByName('corps');
+      setShadow(corps, true, false);
+      corps.visible = true;
+
+      MoRoot = new THREE.Mesh();
+      MoRoot.rotation.set(THREE.Math.degToRad(-90), 0, 0); //placer l'objet avec la verticale en z
+      MoRoot.add(corps);// corps est fils de MoRoot
+      scene.add(MoRoot); // ajouter l'objet dans la scene
+
+
+      //animation de MoRoot : faire tourner le robot à 30°/s
+      //creer une fonction onClick()
+
+      let MoTete = MoRoot.getObjectByName('tete');
+
+      MoRoot.onClick = function (intersection) { };
+      MoRoot.vitesse = 50;
+      MoRoot.vitesseRot = THREE.Math.degToRad(120);
+      //créer une fonction updateAnimation()
+      // MoRoot.updateAnimation = function (dt) {
+      //   // this.rotation.z += dt*THREE.Math.degToRad(30); // faire tourner à 30° par secondes
+      //   //déplacer vers target
+      //   //vecteur de déplacement
+      //   let dx = target.position.x - this.position.x;
+      //   let dy = target.position.z - this.position.z;
+      //   // 1 : calculer la distance qu'il reste à parcourir
+      //   let d = Math.sqrt(dx*dx+dy*dy);
+      //   //si la distance est supérieure à 0.5 alors on avance dans le sens du vecteur
+      //   // if (d>0.5) {
+      //   // this.position.x += dx*dt*this.vitesse;
+      //   // this.position.z += dy*dt*this.vitesse;
+      //   // }
+      //   if (d>0.75) { // si je ne suis pas sur la target
+      //   let alpha;
+      //   if (dx>0) {
+      //     alpha = Math.asin(dy/d);
+      //   } else {
+      //     alpha = Math.PI-Math.asin(dy/d)
+      //   }
+      //   let reste= THREE.Math.radToDeg(alpha)%360+THREE.Math.radToDeg(this.rotation.z)%360;
+      //   if (reste>5) {
+      //     this.rotation.z -= this.vitesseRot*dt;
+      //   } else if (reste<-5){
+      //     this.rotation.z += this.vitesseRot*dt;
+      //   } else{ //avancer
+      //   this.position.x += dx*dt*this.vitesse/d;
+      //   this.position.z += dy*dt*this.vitesse/d;
+      //   }
+      //   }
+      // }
+
+
+      MoRoot.animationStatus = 0;
+      MoRoot.duration = 5;
+      MoRoot.updateAnimation = function (dt) {
+        let dx = target.position.x - this.position.x;
+        let dy = target.position.z - this.position.z;
+        let d = Math.sqrt(dx * dx + dy * dy);
+        switch (this.animationStatus) {
+          case 0:
+            break;
+            case 1: 
+    if (d > 0.75) { 
+        let alpha;
+        if (dx > 0) {
+            alpha = Math.asin(dy / d);
+        } else {
+            alpha = Math.PI - Math.asin(dy / d);
+        }
+        let reste = THREE.Math.radToDeg(alpha) % 360 + THREE.Math.radToDeg(this.rotation.z) % 360;
+        if (reste > 5) {
+            this.rotation.z -= this.vitesseRot * dt;
+        } else if (reste < -5) {
+            this.rotation.z += this.vitesseRot * dt;
+        }else if (tacheVisible){
+              this.animationStatus = 4; 
+              changeMoState('run');
+              document.getElementById("run").checked = true;
+        
+        } else { 
+            this.animationStatus = 2;
+            changeMoState('walk');
+            document.getElementById("walk").checked = true;
+        }
+    }
+    break;
+
+          case 2: 
+            if (d > 0.75) { 
+              this.position.x += dx * dt * this.vitesse / d;
+              this.position.z += dy * dt * this.vitesse / d;
+            } else {
+              this.animationStatus = 3
+              changeMoState('awake');
+              document.getElementById("awake").checked = true;
+            }
+
+            break
+        
+          case 3: //awake
+        
+            this.duration -= dt;
+
+            if (this.duration <= 0) {
+              this.duration = 5;
+              this.animationStatus = 0;
+              changeMoState('sleep');
+              document.getElementById("sleep").checked = true;
+            }
+            break;
+            case 4: // run
+    if (tacheVisible) {
+
+      if (d > 0.75) {
+        this.position.x += dx * dt * this.vitesse / d;
+        this.position.z += dy * dt * this.vitesse / d;
+      }else{
+        this.animationStatus = 5; 
+                changeMoState('clean');
+                document.getElementById("clean").checked = true;
+                 tache.position.set(0, -10, 0); 
+              }
+    } 
+    break;
+    case 5: // clean
+    this.duration -= dt;
+    if (this.duration <= 0) {
+        tache.position.set(0, -10, 0);
+        MoRoot.animationStatus = 1;
+        this.duration = 0.9; 
+        changeMoState('awake');
+        document.getElementById("awake").checked = true;
+      
+        MoRoot.duration = 5;
+    }
+    break;
+
+        }
+      }
+
+      //ajouter MoRoot à animations
+      animations.push(MoRoot);
+
+
+      let gyrophare = MoRoot.getObjectByName('gyrophare');
+      gyrophare.onClick = function (intersection) { };
+      gyrophare.vitesse = THREE.Math.degToRad(540);
+      gyrophare.active = false;
+      gyrophare.t = 0;
+      //pb: le changement de texture du gyro change aussi la texture de la tete
+      //pourquoi? : ils partagent la même texture
+      //solution ! : dupliquer la texture pour avoir deux texture différentes 
+      gyrophare.material.map = textureMoAwake;
+      gyrophare.material.emissiveMap = selfMoAwake;
+      gyrophare.material = gyrophare.material.clone();
+      gyrophare.updateAnimation = function (dt) {
+        if (this.active)
+          this.t += dt;
+        let v = 0.55 + 0.45 * Math.sin(this.vitesse * this.t); //fonction sin
+        this.material.emissive = new THREE.Color(v, v, v);
+      }
+      //animer le gyro
+      animations.push(gyrophare);
+
+      //anim du rouleau
+      let rouleau = MoRoot.getObjectByName('rouleau');
+      rouleau.onClick = function (intersection) { };
+      rouleau.vitesse = THREE.Math.degToRad(180);
+      rouleau.active = false;
+      rouleau.updateAnimation = function (dt) {
+        if (this.active) {
+          this.rotation.z += dt * (this.vitesse);
+        }
+      }
+
+      animations.push(rouleau);
+
+
+
+      let gyro = objects.getObjectByName('gyro');
+      gyro.visible = true;
+      gyro.onClick = function (intersection) { this.vitesse += 180.0; };
+      gyro.vitesse = 90;
+      gyro.updateAnimation = function (dt) {
+        gyro.rotation.z += dt * THREE.Math.degToRad(this.vitesse);
+
+      }
+      //animer le gyro
+      animations.push(gyro);
+
+
+      target = new THREE.Mesh(
+        new THREE.CylinderGeometry(3, 3, 0.1, 24, 1),
+        new THREE.MeshPhongMaterial({ color: 0xffff00, specular: 0xffffff, shininess: 50, emissive: 0x222200 }));
+      target.position.set(0, 0.05, 0);
+      scene.add(target);
+      // scene.add(new THREE.SpotLightHelper(spot)) ;
+
+      tache = new THREE.Mesh
+        (new THREE.PlaneGeometry(6, 6),
+          new THREE.MeshPhongMaterial({
+            color: 0xffff00, specular: 0xffffff, shininess: 50,
+            map: THREE.ImageUtils.loadTexture('images/tache.png'), transparent: true, opacity: 0.9
+          }));
+      tache.position.set(15, 0.01, 0);
+      tache.rotation.x = THREE.Math.degToRad(-90);
+      scene.add(tache)
+
+
+
+      changeMoState('sleep');
+
+      let dt = clock.getElapsedTime();
+      document.getElementById('action').value = "Load completed after " + dt.toFixed(2) + " s.";
+    }
+
+    function onProgress(data) {
+      if (data.lengthComputable) {
+        var percentComplete = data.loaded / data.total * 100;
+        document.getElementById('action').value = "Loading:" + percentComplete.toFixed(1) + '%';
+      }
+    };
+
+
+    function onError(data) {
+      console.error(data);
+    };
+
+    function setShadow(object, cast, receive) {
+      object.castShadow = cast;
+      object.receiveShadow = receive;
+      object.children.forEach(function (children) {
+        setShadow(children, cast, receive);
+      });
+
+    }
+
+    function changeMoState(action) {
+      let MoCorps = MoRoot.getObjectByName('corps');
+      let MoTete = MoRoot.getObjectByName('tete');
+      let MoBras = MoRoot.getObjectByName('bras');
+      let MoGyrophare = MoRoot.getObjectByName('gyrophare');
+      let MoRoue = MoRoot.getObjectByName('roue');
+      let MoAvantBras = MoRoot.getObjectByName('avantbras');
+      let MoGardeBoue = MoRoot.getObjectByName('gardeboue');
+      let MoRouleau = MoRoot.getObjectByName('rouleau');
+
+      //changer la posture en fonction de l'action
+      switch (action) {
+        case 'sleep': // cas 'sleep'
+          MoCorps.position.z = 0;
+          MoAvantBras.position.x = 0.79;
+          MoCorps.rotation.y = THREE.Math.degToRad(0);
+          MoTete.position.z = 5.51;
+          MoRoue.position.z = 1.97;
+          MoBras.rotation.z = THREE.Math.degToRad(-28);
+          MoGardeBoue.rotation.z = THREE.Math.degToRad(17);
+          MoGyrophare.position.y = 2.3;
+          MoGyrophare.active = false;
+          MoTete.children[1].material.map = textureMoSleep;
+          MoTete.children[1].material.emissiveMap = selfMoSleep;
+          MoRouleau.active = false;
+
+          break;
+        case 'awake': //cas 'awake'
+          MoCorps.rotation.y = THREE.Math.degToRad(0);
+          MoAvantBras.position.x = 0.01;
+          MoCorps.position.z = 1.18;
+          MoRoue.position.z = 0.79;
+          MoTete.position.z = 7.24;
+          MoBras.rotation.z = THREE.Math.degToRad(0);
+          MoGyrophare.position.y = 2.3;
+          MoGardeBoue.rotation.z = THREE.Math.degToRad(7);
+          MoGyrophare.active = false;
+          MoTete.children[1].material.map = textureMoAwake;
+          MoTete.children[1].material.emissiveMap = selfMoAwake;
+          MoRouleau.active = false;
+          break;
+        case 'walk': //cas 'walk'
+          MoCorps.position.z = 1.18;
+          MoCorps.rotation.y = THREE.Math.degToRad(9);
+          MoBras.rotation.z = THREE.Math.degToRad(9);
+          MoAvantBras.position.x = 0.01;
+          MoRoue.position.z = 0.79;
+          MoTete.position.z = 7.24;
+          MoGyrophare.position.y = 2.3;
+          MoGardeBoue.rotation.z = THREE.Math.degToRad(7);
+          MoGyrophare.active = false;
+          MoTete.children[1].material.map = textureMoAwake;
+          MoTete.children[1].material.emissiveMap = selfMoAwake;
+          MoRouleau.active = false;
+          break;
+        case 'run': //cas 'run'
+          MoCorps.position.z = 1.18;
+          MoCorps.rotation.y = THREE.Math.degToRad(15);
+          MoBras.rotation.z = THREE.Math.degToRad(15);
+          MoRoue.position.z = 0.79;
+          MoTete.position.z = 7.24;
+          MoAvantBras.position.x = 2.17;
+          MoGyrophare.position.y = 3.55;
+          MoGardeBoue.rotation.z = THREE.Math.degToRad(10);
+          MoGyrophare.active = true;
+          MoTete.children[1].material.map = textureMoAwake;
+          MoTete.children[1].material.emissiveMap = selfMoAwake;
+          MoRouleau.active = false;
+          break;
+        case 'clean': //cas 'clean'
+          MoCorps.position.z = 1.18;
+          MoCorps.rotation.y = THREE.Math.degToRad(10);
+          MoBras.rotation.z = THREE.Math.degToRad(-25);
+          MoRoue.position.z = 0.79;
+          MoTete.position.z = 7.24;
+          MoAvantBras.position.x = 2.17;
+          MoGyrophare.position.y = 3.55;
+          MoGardeBoue.rotation.z = THREE.Math.degToRad(65);
+          MoGyrophare.active = true;
+          MoTete.children[1].material.map = textureMoAwake;
+          MoTete.children[1].material.emissiveMap = selfMoAwake;
+          MoRouleau.active = true;
+          break;
+      }
+    }
+    /******************************************************************************/
+    /* PROGRAMME PRINCIPAL ********************************************************/
+    start();
+    animate();
+
+  </script>
+</body>
+
+</html>

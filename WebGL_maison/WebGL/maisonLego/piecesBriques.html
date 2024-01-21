@@ -1,0 +1,322 @@
+<!DOCTYPE HTML>
+<html lang="fr">
+  <head>
+	<title>Helper Pieces</title>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" href="../images/icon.png" />
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+        background-color: #777777;
+      }
+      #canvas {
+        display : block;
+        position:absolute;
+        left:10px;
+        top:10px;
+        right:434px;
+        bottom:10px;
+        background-color: #000000;
+      }
+      #info {
+    		display : block;
+    		position : absolute;
+    		width : 600px;
+    		top : 10px;
+    		right : 10px;
+        bottom : 10px;
+        background-color: #EEEEEE;
+    		border : 2px solid white;
+    		padding : 5px;
+    		font-size:14pt;
+    		font-family:times new roman;
+    		font-weight:bold;
+    		font-style:italic;
+    		color:black;
+    	}
+      input {
+    		background-color: #FFFFFF;
+        border: none;
+    		width: 260px;
+    		color:black;
+    		font-size:14pt;
+    		font-family:times new roman;
+    		font-weight:bold;
+    	}
+    </style>
+  </head>
+  <body>
+
+    <div id="canvas"></div>
+    <div id="info">
+      <table>
+      		<tr>
+      		<td>Click position:</td><td><input type="text" id="positions" value="(0;0)" class="info" /></td>
+      		</tr>
+      		<tr><td>Clicked object:</td><td><input type="text" id="obj_name" value="vide"  class="info" /></td></tr>
+      		<tr><td>Action:</td><td><input type="text" id="action" value="0" class="info" /></td></tr>
+          <tr><td>Object1:</td><td><select id='obj1'></select></td></tr>
+          <tr><td>Object1.position</td><td>.set(<input type="text" id="obj1_tx" value="0" style="width:30px;"/>,
+            <input type="text" id="obj1_ty" value="0" style="width:30px;"/>,
+            <input type="text" id="obj1_tz" value="0" style="width:30px;"/>)</td></tr>
+          <tr><td>Object1.rotation</td><td>.set(
+            Math.rad(<input type="text" id="obj1_rx" value="0" style="width:30px;"/>),
+            Math.rad(<input type="text" id="obj1_ry" value="0" style="width:30px;"/>),
+            Math.rad(<input type="text" id="obj1_rz" value="0" style="width:30px;"/>))</td></tr>
+          <tr><td>Object2:</td><td><select id='obj2'></select></td></tr>
+          <tr><td>Object2.position</td><td>.set(<input type="text" id="obj2_tx" value="0" style="width:30px;"/>,
+            <input type="text" id="obj2_ty" value="0" style="width:30px;"/>,
+            <input type="text" id="obj2_tz" value="0" style="width:30px;"/>)</td></tr>
+          <tr><td>Object2.rotation</td><td>.set(
+            Math.rad(<input type="text" id="obj2_rx" value="0" style="width:30px;"/>),
+            Math.rad(<input type="text" id="obj2_ry" value="0" style="width:30px;"/>),
+            Math.rad(<input type="text" id="obj2_rz" value="0" style="width:30px;"/>))</td></tr>
+            <tr><td><a href="../models/pieces_lego">Download</a></td></tr>
+        		</table>
+    </div>
+
+<script type="module">
+    import * as THREE from '../three.js-dev/build/three.module.js';
+    import { OrbitControls } from '../three.js-dev/examples/jsm/controls/OrbitControls.js';
+    import { ColladaLoader } from '../three.js-dev/examples/jsm/loaders/ColladaLoader.js';
+  var tabObjects=[ ['brique1x1',null],['brique2x1',null],['brique4x1',null],['brique6x1',null],
+                   ['plaque1x1',null],['plaque2x1',null],['plaque3x1',null],['plaque2x2',null],['plaque3x2',null],
+                   ['toit1x2',null],['toit2x2',null],['toit3x2',null],['toit4x2',null],['toitAngle2x2',null],
+                   ['porte',null],['fenetre',null],['fleur',null]];
+
+  var clickInfo=[];
+  var container = document.getElementById("canvas");
+
+	// variables utilisées par les deux fonctions
+	var renderer,camera,scene,controls;
+  var clock = new THREE.Clock();
+  var SCREEN_WIDTH,SCREEN_HEIGHT,SCREEN_LEFT,SCREEN_TOP;
+  const raycaster = new THREE.Raycaster();
+
+function onClickEvent(event) {
+  clickInfo.userHasClicked = true;
+  clickInfo.mouse = new THREE.Vector2();
+  clickInfo.mouse.x = ((event.clientX-SCREEN_LEFT) / SCREEN_WIDTH ) * 2 - 1;
+  clickInfo.mouse.y = -((event.clientY-SCREEN_TOP) / SCREEN_HEIGHT ) * 2 + 1;
+}
+
+function onWindowResize(){
+    let w = container.offsetWidth;
+    let h = container.offsetHeight;
+    SCREEN_WIDTH = container.scrollWidth;
+    SCREEN_HEIGHT = container.scrollHeight;
+    SCREEN_LEFT = container.offsetLeft - container.scrollLeft + container.clientLeft;
+    SCREEN_TOP = container.offsetTop - container.scrollTop + container.clientTop;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+}
+
+function start() {
+// initialisation du moteur de rendu
+		renderer = new THREE.WebGLRenderer();
+// création d'un canvas dans un div
+		renderer.setClearColor(0x222222,1);
+    window.addEventListener('resize', onWindowResize, false);
+
+		container.appendChild(renderer.domElement);
+    container.addEventListener('click',onClickEvent, false);
+
+    let w = container.offsetWidth;
+    let h = container.offsetHeight;
+    SCREEN_WIDTH = container.scrollWidth;
+    SCREEN_HEIGHT = container.scrollHeight;
+    SCREEN_LEFT = container.offsetLeft - container.scrollLeft + container.clientLeft;
+    SCREEN_TOP = container.offsetTop - container.scrollTop + container.clientTop;
+    renderer.setSize(w, h);
+
+// création d'une caméra perspective(angle d'ouverture, rapport largeur/hauteur, near, far)
+	camera = new THREE.PerspectiveCamera(30, w/h, 1, 60000);
+    camera.position.set(30,100,120);
+	camera.up.set(0,0,1);
+    controls = new OrbitControls(camera,renderer.domElement);
+    controls.target.set(0,0,0);
+    controls.minDistance = 10/2.54;
+    controls.maxDistance = 1000/2.54;
+    controls.update();
+
+// création de la scène
+		scene = new THREE.Scene();
+    scene.add(camera);
+
+    clock.start();
+		var loader = new ColladaLoader();
+		loader.load( './models/pieces_lego.dae',onLoaded, onProgress, onError );
+
+// sources de lumière (une ambiante et une ponctuelle placée en [-10;100;200])
+		let ambientLight = new THREE.AmbientLight(0x202020);
+		scene.add(ambientLight);
+    let pointLight = new THREE.PointLight(0xffffff,1);
+		pointLight.position.set(-10, 100, 200);
+		scene.add(pointLight);
+	}
+
+	function animate(){
+// rendu de la scène
+    controls.update();
+    renderer.render(scene, camera);
+
+    // détection du picking
+    if (clickInfo.userHasClicked) {
+  		document.getElementById('positions').value="("+parseInt((clickInfo.mouse.x+1)*SCREEN_WIDTH) + ';' + parseInt((1-clickInfo.mouse.y)*SCREEN_HEIGHT)+")";
+
+  		clickInfo.userHasClicked=false;
+  		raycaster.setFromCamera(clickInfo.mouse,camera);
+  		let intersections = raycaster.intersectObjects(scene.children,true);
+      let obj=null;
+  		if (intersections.length>0) {
+        obj = intersections[0].object;
+        while (obj!=null && obj.name=="") {
+          obj=obj.parent;
+        }
+      }
+      if (obj) {
+  			document.getElementById('obj_name').value=obj.name+" uv=("+Number.parseFloat(intersections[0].uv.x).toFixed(2)+","+Number.parseFloat(intersections[0].uv.y).toFixed(2)+")";
+        console.log(obj);
+  		} else {
+  			document.getElementById('obj_name').value="vide";
+  		}
+    }
+
+// lancement du frame suivant
+    requestAnimationFrame(animate);
+  }
+
+  function onLoaded(collada) {
+    let objects = collada.scene;
+    let repere = objects.getObjectByName('repere');
+    repere.scale.set(1,1,1);
+	repere.rotation.set(0,0,0);
+	scene.add(repere);
+	let parent1 = new THREE.Object3D();
+	parent1.name="parent1";
+	repere.add(parent1);
+    let parent2 = new THREE.Object3D();
+	parent2.name="parent2";
+	repere.add(parent2);
+	
+	let select1 = document.getElementById('obj1');
+    let select2 = document.getElementById('obj2');
+    let i=0;
+    tabObjects.forEach(function(item) {
+	console.log("load: "+item[0]);
+	  item[1] = objects.getObjectByName(item[0]);
+      item[1].scale.set(1,1,1);
+      item[1].position.set(0,0,0);
+	  item[1].rotation.set(0,0,0);
+      item[2] = item[1].clone();
+      let opt = document.createElement('option');
+      opt.value=i;
+      opt.innerHTML = item[0];
+      select1.appendChild(opt);
+      opt = document.createElement('option');
+      opt.value=i;
+      opt.innerHTML = item[0];
+      select2.appendChild(opt);
+      i++;
+    });
+		
+    select1.onchange = function(){
+	console.log(this.value);
+		let obj = tabObjects[this.value][1];
+		let old = repere.getObjectByName("parent1");
+		if (old) { console.log("parent1 found: "+old.name); repere.remove(old); }
+		let parent1 = new THREE.Object3D();
+		parent1.name="parent1";
+		repere.add(parent1);
+		parent1.add(obj);
+		  document.getElementById('obj1_tx').value = obj.position.x;
+		  document.getElementById('obj1_ty').value = obj.position.y;
+		  document.getElementById('obj1_tz').value = obj.position.z;
+		  document.getElementById('obj1_rx').value = THREE.Math.radToDeg(obj.rotation.x);
+		  document.getElementById('obj1_ry').value = THREE.Math.radToDeg(obj.rotation.y);
+		  document.getElementById('obj1_rz').value = THREE.Math.radToDeg(obj.rotation.z);
+    };
+    select2.onchange = function(){
+        let obj = tabObjects[this.value][1];
+        let old = repere.getObjectByName("parent2");
+		if (old) { repere.remove(old); }
+		let parent2 = new THREE.Object3D();
+		parent2.name="parent2";
+		repere.add(parent2);
+		parent2.add(obj);
+		  document.getElementById('obj2_tx').value = obj.position.x;
+		  document.getElementById('obj2_ty').value = obj.position.y;
+		  document.getElementById('obj2_tz').value = obj.position.z;
+		  document.getElementById('obj2_rx').value = THREE.Math.radToDeg(obj.rotation.x);
+		  document.getElementById('obj2_ry').value = THREE.Math.radToDeg(obj.rotation.y);
+		  document.getElementById('obj2_rz').value = THREE.Math.radToDeg(obj.rotation.z);
+    };
+    
+	select1.value=0;
+    select2.value=1;
+    parent1.add(tabObjects[0][1]);
+    parent2.add(tabObjects[1][1]);
+    document.getElementById('obj1_tx').onchange = function() {
+      tabObjects[select1.value][1].position.x = parseFloat(this.value);
+    }
+    document.getElementById('obj1_ty').onchange = function() {
+      tabObjects[select1.value][1].position.y = parseFloat(this.value);
+    }
+    document.getElementById('obj1_tz').onchange = function() {
+      tabObjects[select1.value][1].position.z = parseFloat(this.value);
+    }
+    document.getElementById('obj1_rx').onchange = function() {
+      tabObjects[select1.value][1].rotation.x = THREE.Math.degToRad(parseFloat(this.value));
+    }
+    document.getElementById('obj1_ry').onchange = function() {
+      tabObjects[select1.value][1].rotation.y = THREE.Math.degToRad(parseFloat(this.value));
+    }
+    document.getElementById('obj1_rz').onchange = function() {
+      tabObjects[select1.value][1].rotation.z = THREE.Math.degToRad(parseFloat(this.value));
+    }
+
+    document.getElementById('obj2_tx').onchange = function() {
+      tabObjects[select2.value][1].position.x = parseFloat(this.value);
+    }
+    document.getElementById('obj2_ty').onchange = function() {
+      tabObjects[select2.value][1].position.y = parseFloat(this.value);
+    }
+    document.getElementById('obj2_tz').onchange = function() {
+      tabObjects[select2.value][1].position.z = parseFloat(this.value);
+    }
+    document.getElementById('obj2_rx').onchange = function() {
+      tabObjects[select2.value][1].rotation.x = THREE.Math.degToRad(parseFloat(this.value));
+    }
+    document.getElementById('obj2_ry').onchange = function() {
+      tabObjects[select2.value][1].rotation.y = THREE.Math.degToRad(parseFloat(this.value));
+    }
+    document.getElementById('obj2_rz').onchange = function() {
+      tabObjects[select2.value][1].rotation.z = THREE.Math.degToRad(parseFloat(this.value));
+    }
+
+
+    let dt = clock.getElapsedTime();
+    document.getElementById('action').value ="Load completed after "+dt.toFixed(2)+" s.";
+  }
+
+  function onProgress(data) {
+    if ( data.lengthComputable ) {
+        var percentComplete = data.loaded / data.total * 100;
+        document.getElementById('action').value = "Loading:" + percentComplete.toFixed(1) + '%';
+    }
+  };
+
+  function onError(data) {
+    console.error(data);
+  };
+
+/******************************************************************************/
+/* PROGRAMME PRINCIPAL ********************************************************/
+	start();
+	animate();
+
+    </script>
+  </body>
+</html>
